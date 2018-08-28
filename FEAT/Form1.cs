@@ -163,6 +163,7 @@ namespace Fire_Emblem_Awakening_Archive_Tool
                     }
                     else if (filedata[0] == 0x17 && filedata[4] == 0x11) // Fire Emblem Heroes "LZ17"
                     {
+                        byte[] first4 = filedata.Take(4).ToArray();
                         var xorkey = BitConverter.ToUInt32(filedata, 0) >> 8;
                         xorkey *= 0x8083;
                         for (var i = 8; i < filedata.Length; i += 0x4)
@@ -171,6 +172,14 @@ namespace Fire_Emblem_Awakening_Archive_Tool
                             xorkey ^= BitConverter.ToUInt32(filedata, i);
                         }
                         filedata = filedata.Skip(4).ToArray();
+
+                        byte[] output = LZ11Decompress(filedata);
+                        byte[] output2 = new byte[4 + output.Length];
+                        first4.CopyTo(output2, 0);
+                        output.CopyTo(output2, 4);
+                        File.WriteAllBytes(decpath, output2);
+                        AddLine(RTB_Output, string.Format("Successfully decompressed {0}.", Path.GetFileName(decpath)));
+                        return;
                     }
                     else if (filedata[0] == 0x4 && (BitConverter.ToUInt32(filedata, 0) >> 8) == filedata.Length - 4)
                     {
@@ -211,7 +220,21 @@ namespace Fire_Emblem_Awakening_Archive_Tool
                 else if (ext == ".bin")
                 {
                     byte[] filedata = File.ReadAllBytes(path);
-                    var outname = Path.GetDirectoryName(path) + Path.DirectorySeparatorChar + Path.GetFileNameWithoutExtension(path) + ".txt";
+                    var xorkey = BitConverter.ToUInt32(filedata, 0) >> 8;
+                    xorkey *= 0x8083;
+                    var lz = filedata.Skip(4).ToArray();
+                    lz = LZ11Compress(lz);
+                    var output = new byte[4 + lz.Length+(lz.Length%4==0?0:4-lz.Length%4) ];
+                    filedata.Take(4).ToArray().CopyTo(output, 0);
+                    lz.CopyTo(output, 4);
+                    for (var i = 8; i < output.Length; i += 0x4)
+                    {
+                        BitConverter.GetBytes(BitConverter.ToUInt32(output, i) ^ xorkey).CopyTo(output, i);
+                        xorkey = BitConverter.ToUInt32(output, i);
+                    }
+                    File.WriteAllBytes(Path.GetDirectoryName(path) + Path.DirectorySeparatorChar + Path.GetFileNameWithoutExtension(path) + ".bin.lz", output);
+                    AddLine(RTB_Output, string.Format("Successfully Compressed {0}.", Path.GetFileName(path)));
+                    /*var outname = Path.GetDirectoryName(path) + Path.DirectorySeparatorChar + Path.GetFileNameWithoutExtension(path) + ".txt";
                     if (BitConverter.ToUInt32(filedata, 0) == filedata.Length &&
                         new string(filedata.Skip(0x20).Take(0xC).Select(c => (char)c).ToArray()) == "MESS_ARCHIVE")
                     {
@@ -222,6 +245,7 @@ namespace Fire_Emblem_Awakening_Archive_Tool
                     {
                         AddLine(RTB_Output, string.Format("Successfully extracted Heroes Message Archive {0}", Path.GetFileName(path)));
                     }
+                    */
                 }
                 else if (ext == ".arc")
                 {
